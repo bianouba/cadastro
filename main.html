@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Cadastro - Principal</title>
+    <style>
+        /* Estilos gerais e importação da fonte */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { height: 100%; font-family: 'Roboto', sans-serif; background-color: #f0f2f5; }
+
+        /* Estilo do container principal */
+        .main-container { display: flex; flex-direction: column; height: 100vh; }
+
+        /* Cabeçalho */
+        header {
+            background-color: #ffffff; padding: 15px 30px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex; justify-content: space-between; align-items: center; z-index: 100;
+        }
+        header h1 { font-size: 22px; color: #1877f2; }
+        
+        /* Menu de Navegação */
+        nav { display: flex; gap: 15px; }
+        nav button {
+            width: auto; padding: 10px 20px; font-size: 16px; font-weight: 500;
+            background-color: #e4e6eb; color: #050505; border: none; border-radius: 8px;
+            cursor: pointer; transition: background-color 0.2s;
+        }
+        nav button:hover { background-color: #d8dadf; }
+        
+        /* Botão de Logoff */
+        #logoffButton { background-color: #fa3e3e; color: white; }
+        #logoffButton:hover { background-color: #e33434; }
+
+        /* Área de conteúdo principal */
+        main { flex-grow: 1; padding: 30px; overflow-y: auto; }
+        .welcome-message { text-align: center; color: #606770; margin-top: 50px; }
+
+        /* Estilos do Loader de Autenticação */
+        .loader-container { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; }
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #1877f2; border-radius: 50%;
+            width: 40px; height: 40px; animation: spin 1s linear infinite;
+        }
+        .loader-container p { margin-top: 15px; color: #606770; font-size: 16px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- ESTILOS COMUNS (FORMULÁRIO, BUSCA, DETALHES) --- */
+        .content-container { background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .content-container h2 { color: #1877f2; margin-bottom: 25px; border-bottom: 2px solid #f0f2f5; padding-bottom: 10px; }
+        .form-section { margin-bottom: 30px; }
+        .form-section h3 { font-size: 18px; color: #606770; margin-bottom: 20px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .input-group { display: flex; flex-direction: column; }
+        .input-group.full-width { grid-column: 1 / -1; }
+        .input-group label { font-size: 14px; color: #606770; margin-bottom: 5px; }
+        .input-group input, .input-group textarea, .input-group select { width: 100%; padding: 10px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 15px; background-color: #fff; }
+        .input-group input:focus, .input-group textarea:focus, .input-group select:focus { outline: none; border-color: #1877f2; }
+        .input-group input:disabled, .input-group textarea:disabled, .input-group select:disabled { background-color: #f5f5f5; color: #888; }
+        .radio-group { display: flex; align-items: center; gap: 20px; height: 41px; }
+        .radio-group label { margin-bottom: 0; margin-left: -15px; }
+        .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 30px; }
+        .form-actions button { width: auto; padding: 12px 30px; font-size: 16px; }
+        .button-save { background-color: #36a420; color: #fff; border: none; border-radius: 6px; }
+        .button-save:hover { background-color: #2f8b1c; }
+        .button-edit { background-color: #1877f2; color: #fff; border: none; border-radius: 6px; }
+        .button-edit:hover { background-color: #166fe5; }
+        .button-secondary { background-color: #e4e6eb; color: #050505; font-weight: 500; width: auto; padding: 10px 20px; font-size: 14px; }
+        .button-secondary:hover { background-color: #d8dadf; }
+        .dependente-item { border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-top: 20px; background-color: #fafafa; }
+        .dependente-item h4 { margin-bottom: 15px; color: #1c1e21; }
+        .remove-dependente { background-color: #fa3e3e; color: white; border: none; border-radius: 6px; padding: 10px; cursor: pointer; margin-top: 15px; float: right; }
+        .remove-dependente:hover { background-color: #e33434; }
+        #form-feedback { padding: 15px; margin-top: 20px; border-radius: 6px; text-align: center; display: none; }
+        .feedback-success { background-color: #e6f7e9; color: #1d812a; border: 1px solid #a7d7b0; }
+        .feedback-error { background-color: #ffebe6; color: #fa3e3e; border: 1px solid #fa3e3e; }
+
+        /* --- ESTILOS DA BUSCA --- */
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex-grow: 1; }
+        .search-bar button { width: auto; font-size: 16px; padding: 10px 20px; background-color: #1877f2; color: #fff; border: none; border-radius: 6px; }
+        #search-results { margin-top: 20px; }
+        .result-item { background-color: #f9f9f9; border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .result-item:hover { background-color: #f0f2f5; }
+        .result-item-name { font-weight: 500; }
+        .result-item-cpf { font-size: 14px; color: #606770; }
+        .result-item button { width: auto; font-size: 14px; padding: 8px 15px; background-color: #36a420; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="loader" class="loader-container">
+        <div class="loader"></div>
+        <p>Verificando autenticação...</p>
+    </div>
+
+    <div id="main-content" class="main-container" style="display: none;">
+        <header>
+            <h1>Sistema de Cadastro</h1>
+            <nav>
+                <button id="btn-cadastrar">Cadastrar</button>
+                <button id="btn-buscar">Buscar</button>
+                <button id="logoffButton">Logoff</button>
+            </nav>
+        </header>
+
+        <main id="content-area">
+            </main>
+    </div>
+
+    <template id="form-template">
+        <div class="content-container">
+            <h2>Cadastro de Novo Contato</h2>
+            <form id="memberForm">
+                <div class="form-section">
+                    <h3>Dados Pessoais</h3>
+                    <div class="form-grid">
+                        <div class="input-group"><label for="nome">Nome</label><input type="text" id="nome" required></div>
+                        <div class="input-group"><label for="apelido">Apelido</label><input type="text" id="apelido"></div>
+                        <div class="input-group"><label for="data_nascimento">Data de Nascimento</label><input type="date" id="data_nascimento"></div>
+                        <div class="input-group"><label for="cpf">CPF</label><input type="text" id="cpf"></div>
+                        <div class="input-group"><label for="rg">RG</label><input type="text" id="rg"></div>
+                        <div class="input-group"><label for="titulo_eleitor">Título de Eleitor</label><input type="text" id="titulo_eleitor"></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Endereço</h3>
+                    <div class="form-grid">
+                        <div class="input-group"><label for="endereco">Endereço</label><input type="text" id="endereco"></div>
+                        <div class="input-group"><label for="bairro">Bairro</label><select id="bairro"></select></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Informações Adicionais</h3>
+                    <div class="form-grid">
+                        <div class="input-group"><label>É líder?</label><div class="radio-group"><input type="radio" id="lider_sim" name="lider" value="Sim"><label for="lider_sim">Sim</label><input type="radio" id="lider_nao" name="lider" value="Não" checked><label for="lider_nao">Não</label></div></div>
+                        
+                        <div class="input-group campo-autorizado"><label>Conseguiu emprego?</label><div class="radio-group"><input type="radio" id="emprego_sim" name="emprego" value="Sim"><label for="emprego_sim">Sim</label><input type="radio" id="emprego_nao" name="emprego" value="Não" checked><label for="emprego_nao">Não</label></div></div>
+                        <div class="input-group full-width campo-autorizado" id="local_emprego_group" style="display: none;"><label for="local_emprego">Local do Emprego</label><input type="text" id="local_emprego"></div>
+                        
+                        <div class="input-group full-width"><label for="demandas_atendidas">Demandas Atendidas</label><textarea id="demandas_atendidas" rows="4"></textarea></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Dependentes</h3>
+                    <div id="dependentes-container"></div>
+                    <button type="button" id="addDependente" class="button-secondary">Adicionar Dependente</button>
+                </div>
+                <div class="form-actions"><button type="submit" class="button-save">Salvar Cadastro</button></div>
+            </form>
+            <div id="form-feedback"></div>
+        </div>
+    </template>
+
+    <template id="search-template">
+        <div class="content-container">
+            <h2>Buscar Cadastro</h2>
+            <form id="searchForm">
+                <div class="search-bar">
+                    <input type="text" id="searchInput" placeholder="Digite o nome para buscar..." class="input-group">
+                    <button type="submit">Buscar</button>
+                </div>
+            </form>
+            <div id="search-results"><p>Nenhum resultado para exibir. Inicie uma busca acima.</p></div>
+        </div>
+    </template>
+    
+    <template id="details-template">
+        <div class="content-container">
+            <h2>Detalhes do Cadastro</h2>
+            <form id="detailsForm">
+                <input type="hidden" id="docId">
+                <div class="form-section">
+                    <h3>Dados Pessoais</h3>
+                    <div class="form-grid">
+                        <div class="input-group"><label for="nome">Nome</label><input type="text" id="nome" disabled></div>
+                        <div class="input-group"><label for="apelido">Apelido</label><input type="text" id="apelido" disabled></div>
+                        <div class="input-group"><label for="data_nascimento">Data de Nascimento</label><input type="date" id="data_nascimento" disabled></div>
+                        <div class="input-group"><label for="cpf">CPF</label><input type="text" id="cpf" disabled></div>
+                        <div class="input-group"><label for="rg">RG</label><input type="text" id="rg" disabled></div>
+                        <div class="input-group"><label for="titulo_eleitor">Título de Eleitor</label><input type="text" id="titulo_eleitor" disabled></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Endereço</h3>
+                    <div class="form-grid">
+                        <div class="input-group"><label for="endereco">Endereço</label><input type="text" id="endereco" disabled></div>
+                        <div class="input-group"><label for="bairro">Bairro</label><select id="bairro" disabled></select></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Informações Adicionais</h3>
+                    <div class="form-grid">
+                        <div class="input-group"><label>É líder?</label><div class="radio-group"><input type="radio" id="lider_sim" name="lider" value="Sim" disabled><label for="lider_sim">Sim</label><input type="radio" id="lider_nao" name="lider" value="Não" disabled><label for="lider_nao">Não</label></div></div>
+                        
+                        <div class="input-group campo-autorizado"><label>Conseguiu emprego?</label><div class="radio-group"><input type="radio" id="emprego_sim" name="emprego" value="Sim" disabled><label for="emprego_sim">Sim</label><input type="radio" id="emprego_nao" name="emprego" value="Não" disabled><label for="emprego_nao">Não</label></div></div>
+                        <div class="input-group full-width campo-autorizado" id="local_emprego_group" style="display: none;"><label for="local_emprego">Local do Emprego</label><input type="text" id="local_emprego" disabled></div>
+                        
+                        <div class="input-group full-width"><label for="demandas_atendidas">Demandas Atendidas</label><textarea id="demandas_atendidas" rows="4" disabled></textarea></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Dependentes</h3>
+                    <div id="dependentes-list"></div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="editButton" class="button-edit">Editar</button>
+                    <button type="submit" id="saveChangesButton" class="button-save" style="display: none;">Salvar Alterações</button>
+                </div>
+            </form>
+            <div id="form-feedback"></div>
+        </div>
+    </template>
+
+    <script type="module">
+        // Importa as funções necessárias do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+
+        // =================================================================================
+        // COLE AQUI AS SUAS CHAVES DE CONFIGURAÇÃO DO FIREBASE
+        // =================================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAifFxis5rYKRwfgUpkj9UYT_tYD0GXp44",
+			authDomain: "cadastrocardim.firebaseapp.com",
+			projectId: "cadastrocardim",
+			storageBucket: "cadastrocardim.firebasestorage.app",
+			messagingSenderId: "1052838349059",
+			appId: "1:1052838349059:web:901c1e4cda9c1946da0136"
+        };
+        // =================================================================================
+
+        // INÍCIO DA LISTA DE BAIRROS (VOCÊ PODE EDITAR AQUI)
+        const bairros = [
+            "Arrastão", "Baleia", "Barra do Una", "Barequeçaba", "Boiçucanga", "Boraceia", "Calhetas", "Camburi", "Canto do Mar", "Centro", 
+			"Cigarras", "Enseada", "Figueira", "Guaecá", "Itatinga", "Jaraguá", "Juquehy", "Maresias", "Mirante", "Olaria", "Paúba", 
+            "Pontal da Cruz", "Portal da Olaria", "Porto Grande", "Praia Deserta", "Reserva",
+            "Sahy", "Santiago", "São Francisco", "Sertão do Camburi", "Topolândia", "Toque-Toque Grande", "Toque-Toque Pequeno",
+			"Varadouro", "Vila Amélia", "Vila Sahy"
+        ];
+        // FIM DA LISTA DE BAIRROS
+
+        // Inicializa o Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // NOVO: Lista de e-mails autorizados (use letras minúsculas)
+        const USUARIOS_AUTORIZADOS = [
+            'bianouba@gmail.com',
+            'daniel@email.com',
+            'cardim@email.com',
+            'bianouba@gmail.com' // Seu e-mail adicionado
+        ];
+
+        // NOVO: Função central para verificar a autorização
+        function isUserAuthorized() {
+            const user = auth.currentUser;
+            if (!user || !user.email) {
+                return false;
+            }
+            return USUARIOS_AUTORIZADOS.includes(user.email.toLowerCase());
+        }
+
+        const contentArea = document.getElementById('content-area');
+
+        // --- Verificador de Autenticação (Proteção de Página) ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // A verificação de autorização foi movida para uma função separada
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('main-content').style.display = 'flex';
+                showWelcomeMessage();
+            } else {
+                const currentPath = window.location.pathname;
+                const newPath = currentPath.substring(0, currentPath.lastIndexOf('/')) + '/index.html';
+                window.location.href = newPath;
+            }
+        });
+
+        // --- Lógica do Menu ---
+        document.getElementById('btn-cadastrar').addEventListener('click', () => initRegister());
+        document.getElementById('btn-buscar').addEventListener('click', () => initSearch());
+        document.getElementById('logoffButton').addEventListener('click', () => { signOut(auth); });
+
+        function showWelcomeMessage() {
+            contentArea.innerHTML = `<div class="welcome-message"><h2>Bem-vindo!</h2><p>Selecione uma opção no menu acima para começar.</p></div>`;
+        }
+        
+        // --- FUNÇÃO AUXILIAR PARA POPULAR O DROPDOWN DE BAIRROS ---
+        function populateBairrosDropdown(selectElementId, selectedValue = '') {
+            const select = document.getElementById(selectElementId);
+            if (!select) return;
+            select.innerHTML = '<option value="">Selecione um bairro</option>';
+            bairros.sort().forEach(bairro => {
+                const option = document.createElement('option');
+                option.value = bairro;
+                option.textContent = bairro;
+                if (bairro === selectedValue) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        // ========================================================================
+        //  LÓGICA DE CADASTRO
+        // ========================================================================
+        function initRegister() {
+            const template = document.getElementById('form-template');
+            const clone = template.content.cloneNode(true);
+
+            // NOVO: Chama a função de verificação no momento da renderização
+            if (!isUserAuthorized()) {
+                clone.querySelectorAll('.campo-autorizado').forEach(el => el.remove());
+            }
+
+            contentArea.innerHTML = '';
+            contentArea.appendChild(clone);
+            populateBairrosDropdown('bairro');
+            setupFormListeners();
+        }
+
+        function setupFormListeners() {
+            const empregoRadios = document.querySelectorAll('input[name="emprego"]');
+            if (empregoRadios.length > 0) {
+                empregoRadios.forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        document.getElementById('local_emprego_group').style.display = e.target.value === 'Sim' ? 'block' : 'none';
+                    });
+                });
+            }
+
+            document.getElementById('addDependente').addEventListener('click', () => {
+                const container = document.getElementById('dependentes-container');
+                const item = document.createElement('div');
+                item.className = 'dependente-item';
+                item.innerHTML = `<h4>Novo Dependente</h4><div class="form-grid"><div class="input-group"><label>Nome</label><input type="text" class="dependente-nome" required></div><div class="input-group"><label>Parentesco</label><input type="text" class="dependente-parentesco"></div><div class="input-group"><label>Data de Nascimento</label><input type="date" class="dependente-nascimento"></div><div class="input-group"><label>CPF</label><input type="text" class="dependente-cpf"></div><div class="input-group"><label>RG</label><input type="text" class="dependente-rg"></div><div class="input-group"><label>Título de Eleitor</label><input type="text" class="dependente-titulo"></div></div><button type="button" class="remove-dependente">Remover</button>`;
+                container.appendChild(item);
+            });
+            contentArea.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-dependente')) {
+                    e.target.closest('.dependente-item').remove();
+                }
+            });
+            document.getElementById('memberForm').addEventListener('submit', handleFormSubmit);
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const saveButton = e.target.querySelector('button[type="submit"]');
+            const feedbackDiv = document.getElementById('form-feedback');
+            saveButton.disabled = true;
+            saveButton.textContent = 'Salvando...';
+            feedbackDiv.style.display = 'none';
+
+            try {
+                const empregoRadio = document.querySelector('input[name="emprego"]:checked');
+                const localEmpregoInput = document.getElementById('local_emprego');
+
+                const membro = {
+                    nome: document.getElementById('nome').value,
+                    endereco: document.getElementById('endereco').value,
+                    bairro: document.getElementById('bairro').value,
+                    cpf: document.getElementById('cpf').value,
+                    rg: document.getElementById('rg').value,
+                    data_nascimento: document.getElementById('data_nascimento').value,
+                    titulo_eleitor: document.getElementById('titulo_eleitor').value,
+                    lider: document.querySelector('input[name="lider"]:checked').value,
+                    demandas_atendidas: document.getElementById('demandas_atendidas').value,
+                    emprego: empregoRadio ? empregoRadio.value : 'Não', // NOVO: Valor padrão seguro
+                    local_emprego: localEmpregoInput ? localEmpregoInput.value : '',
+                    apelido: document.getElementById('apelido').value,
+                    data_hora_cadastro: serverTimestamp()
+                };
+                const docRef = await addDoc(collection(db, "cadastros"), membro);
+                
+                const dependentesElements = document.querySelectorAll('.dependente-item');
+                if (dependentesElements.length > 0) {
+                    for (const item of dependentesElements) {
+                        const dependente = {
+                            id_cadastro: docRef.id,
+                            nome: item.querySelector('.dependente-nome').value,
+                            cpf: item.querySelector('.dependente-cpf').value,
+                            rg: item.querySelector('.dependente-rg').value,
+                            data_nascimento: item.querySelector('.dependente-nascimento').value,
+                            titulo_eleitor: item.querySelector('.dependente-titulo').value,
+                            parentesco: item.querySelector('.dependente-parentesco').value,
+                        };
+                        await addDoc(collection(db, "dependentes"), dependente);
+                    }
+                }
+                
+                feedbackDiv.textContent = 'Cadastro salvo com sucesso!';
+                feedbackDiv.className = 'feedback-success';
+                document.getElementById('memberForm').reset();
+                document.getElementById('dependentes-container').innerHTML = '';
+                if(localEmpregoInput) localEmpregoInput.parentElement.style.display = 'none';
+
+            } catch (error) {
+                console.error("Erro ao salvar no Firestore: ", error);
+                feedbackDiv.textContent = 'Erro ao salvar. Verifique o console para mais detalhes.';
+                feedbackDiv.className = 'feedback-error';
+            } finally {
+                feedbackDiv.style.display = 'block';
+                saveButton.disabled = false;
+                saveButton.textContent = 'Salvar Cadastro';
+            }
+        }
+
+        // ========================================================================
+        //  LÓGICA DE BUSCA E EDIÇÃO
+        // ========================================================================
+        function initSearch() {
+            const template = document.getElementById('search-template');
+            contentArea.innerHTML = '';
+            contentArea.appendChild(template.content.cloneNode(true));
+            
+            document.getElementById('searchForm').addEventListener('submit', handleSearchSubmit);
+            contentArea.addEventListener('click', (e) => {
+                if (e.target.matches('.result-item button')) {
+                    const docId = e.target.dataset.id;
+                    showDetails(docId);
+                }
+            });
+        }
+
+        async function handleSearchSubmit(e) {
+            e.preventDefault();
+            const searchTerm = document.getElementById('searchInput').value;
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (!searchTerm) {
+                resultsDiv.innerHTML = '<p>Por favor, digite um nome para buscar.</p>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<p>Buscando...</p>';
+
+            try {
+                const q = query(collection(db, "cadastros"), 
+                                where("nome", ">=", searchTerm),
+                                where("nome", "<=", searchTerm + '\uf8ff'),
+                                orderBy("nome"));
+                const querySnapshot = await getDocs(q);
+                
+                if (querySnapshot.empty) {
+                    resultsDiv.innerHTML = '<p>Nenhum resultado encontrado.</p>';
+                } else {
+                    resultsDiv.innerHTML = '';
+                    querySnapshot.forEach((doc) => {
+                        const data = doc.data();
+                        const resultItem = document.createElement('div');
+                        resultItem.className = 'result-item';
+                        resultItem.innerHTML = `
+                            <div>
+                                <div class="result-item-name">${data.nome}</div>
+                                <div class="result-item-cpf">CPF: ${data.cpf || 'Não informado'}</div>
+                            </div>
+                            <button data-id="${doc.id}">Ver Detalhes</button>
+                        `;
+                        resultsDiv.appendChild(resultItem);
+                    });
+                }
+            } catch (error) {
+                console.error("Erro ao buscar dados: ", error);
+                resultsDiv.innerHTML = '<p class="feedback-error">Ocorreu um erro ao realizar a busca.</p>';
+            }
+        }
+
+        async function showDetails(docId) {
+            contentArea.innerHTML = '<div class="loader-container"><div class="loader"></div><p>Carregando detalhes...</p></div>';
+            
+            try {
+                const docRef = doc(db, "cadastros", docId);
+                const docSnap = await getDoc(docRef);
+
+                if (!docSnap.exists()) {
+                    contentArea.innerHTML = '<p class="feedback-error">Cadastro não encontrado.</p>';
+                    return;
+                }
+                
+                const data = docSnap.data();
+                const dependentesQuery = query(collection(db, "dependentes"), where("id_cadastro", "==", docId));
+                const dependentesSnapshot = await getDocs(dependentesQuery);
+                const dependentes = [];
+                dependentesSnapshot.forEach(doc => dependentes.push(doc.data()));
+
+                const template = document.getElementById('details-template');
+                const clone = template.content.cloneNode(true);
+                
+                // NOVO: Chama a função de verificação no momento da renderização
+                if (!isUserAuthorized()) {
+                    clone.querySelectorAll('.campo-autorizado').forEach(el => el.remove());
+                }
+
+                contentArea.innerHTML = '';
+                contentArea.appendChild(clone);
+                
+                populateBairrosDropdown('bairro', data.bairro);
+
+                document.getElementById('docId').value = docId;
+                document.getElementById('nome').value = data.nome || '';
+                document.getElementById('apelido').value = data.apelido || '';
+                document.getElementById('data_nascimento').value = data.data_nascimento || '';
+                document.getElementById('cpf').value = data.cpf || '';
+                document.getElementById('rg').value = data.rg || '';
+                document.getElementById('titulo_eleitor').value = data.titulo_eleitor || '';
+                document.getElementById('endereco').value = data.endereco || '';
+                document.getElementById('demandas_atendidas').value = data.demandas_atendidas || '';
+                
+                document.querySelector(`input[name="lider"][value="${data.lider || 'Não'}"]`).checked = true;
+
+                // NOVO: Só preenche os campos de emprego se eles existirem
+                if (isUserAuthorized()) {
+                    document.querySelector(`input[name="emprego"][value="${data.emprego || 'Não'}"]`).checked = true;
+                    document.getElementById('local_emprego').value = data.local_emprego || '';
+                    document.getElementById('local_emprego_group').style.display = data.emprego === 'Sim' ? 'block' : 'none';
+                }
+
+                const dependentesList = document.getElementById('dependentes-list');
+                if (dependentes.length > 0) {
+                    dependentes.forEach(dep => {
+                        const item = document.createElement('div');
+                        item.className = 'result-item';
+                        item.innerHTML = `<div><div class="result-item-name">${dep.nome}</div><div class="result-item-cpf">Parentesco: ${dep.parentesco || 'Não informado'}</div></div>`;
+                        dependentesList.appendChild(item);
+});
+                } else {
+                    dependentesList.innerHTML = '<p>Nenhum dependente cadastrado.</p>';
+                }
+
+                document.getElementById('editButton').addEventListener('click', () => enableEditing());
+                document.getElementById('detailsForm').addEventListener('submit', handleUpdateSubmit);
+
+            } catch (error) {
+                console.error("Erro ao carregar detalhes: ", error);
+                contentArea.innerHTML = '<p class="feedback-error">Ocorreu um erro ao carregar os detalhes.</p>';
+            }
+        }
+
+        function enableEditing() {
+            const form = document.getElementById('detailsForm');
+            const inputs = form.querySelectorAll('input, textarea, select');
+            inputs.forEach(input => {
+                if(input.type !== 'hidden') input.disabled = false;
+            });
+
+            document.getElementById('editButton').style.display = 'none';
+            document.getElementById('saveChangesButton').style.display = 'block';
+        }
+
+        async function handleUpdateSubmit(e) {
+            e.preventDefault();
+            const saveButton = document.getElementById('saveChangesButton');
+            const feedbackDiv = document.getElementById('form-feedback');
+            const docId = document.getElementById('docId').value;
+
+            saveButton.disabled = true;
+            saveButton.textContent = 'Salvando...';
+            feedbackDiv.style.display = 'none';
+
+            try {
+                const empregoRadio = document.querySelector('input[name="emprego"]:checked');
+                const localEmpregoInput = document.getElementById('local_emprego');
+
+                const updatedData = {
+                    nome: document.getElementById('nome').value,
+                    apelido: document.getElementById('apelido').value,
+                    data_nascimento: document.getElementById('data_nascimento').value,
+                    cpf: document.getElementById('cpf').value,
+                    rg: document.getElementById('rg').value,
+                    titulo_eleitor: document.getElementById('titulo_eleitor').value,
+                    endereco: document.getElementById('endereco').value,
+                    bairro: document.getElementById('bairro').value,
+                    lider: document.querySelector('input[name="lider"]:checked').value,
+                    emprego: empregoRadio ? empregoRadio.value : 'Não', // NOVO: Valor padrão seguro
+                    local_emprego: localEmpregoInput ? localEmpregoInput.value : '',
+                    demandas_atendidas: document.getElementById('demandas_atendidas').value,
+                };
+
+                const docRef = doc(db, "cadastros", docId);
+                await updateDoc(docRef, updatedData);
+
+                feedbackDiv.textContent = 'Alterações salvas com sucesso!';
+                feedbackDiv.className = 'feedback-success';
+                
+                const form = document.getElementById('detailsForm');
+                const inputs = form.querySelectorAll('input, textarea, select');
+                inputs.forEach(input => input.disabled = true);
+                document.getElementById('editButton').style.display = 'block';
+                document.getElementById('saveChangesButton').style.display = 'none';
+
+            } catch (error) {
+                console.error("Erro ao atualizar documento: ", error);
+                feedbackDiv.textContent = 'Erro ao salvar as alterações.';
+                feedbackDiv.className = 'feedback-error';
+            } finally {
+                feedbackDiv.style.display = 'block';
+                saveButton.disabled = false;
+                saveButton.textContent = 'Salvar Alterações';
+            }
+        }
+
+    </script>
+</body>
+</html>
