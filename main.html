@@ -17,11 +17,18 @@
         header {
             background-color: #ffffff; padding: 15px 30px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             display: flex; justify-content: space-between; align-items: center; z-index: 100;
+            /* NOVO: Permite que os itens quebrem a linha em telas pequenas */
+            flex-wrap: wrap;
+            gap: 15px; /* Adiciona um espaço caso quebre a linha */
         }
         header h1 { font-size: 22px; color: #1877f2; }
         
         /* Menu de Navegação */
-        nav { display: flex; gap: 15px; }
+        nav { display: flex; gap: 15px; 
+            /* NOVO: Permite que os botões quebrem a linha */
+            flex-wrap: wrap; 
+            justify-content: flex-start; /* Alinha botões à esquerda por padrão */
+        }
         nav button {
             width: auto; padding: 10px 20px; font-size: 16px; font-weight: 500;
             background-color: #e4e6eb; color: #050505; border: none; border-radius: 8px;
@@ -32,6 +39,19 @@
         /* Botão de Logoff */
         #logoffButton { background-color: #fa3e3e; color: white; }
         #logoffButton:hover { background-color: #e33434; }
+
+        /* NOVO: Media Query para telas menores (celulares) */
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column; /* Coloca o título em cima e a navegação embaixo */
+                align-items: flex-start; /* Alinha tudo à esquerda */
+            }
+            nav {
+                width: 100%; /* Faz a navegação ocupar a largura toda */
+                justify-content: flex-start; /* Garante que os botões comecem da esquerda */
+            }
+        }
+
 
         /* Área de conteúdo principal */
         main { flex-grow: 1; padding: 30px; overflow-y: auto; }
@@ -92,26 +112,31 @@
     </style>
 </head>
 <body>
+    <!-- Loader de verificação -->
     <div id="loader" class="loader-container">
         <div class="loader"></div>
         <p>Verificando autenticação...</p>
     </div>
 
+    <!-- Conteúdo principal (começa escondido) -->
     <div id="main-content" class="main-container" style="display: none;">
         <header>
             <h1>Sistema de Cadastro</h1>
             <nav>
                 <button id="btn-cadastrar">Cadastrar</button>
                 <button id="btn-buscar">Buscar</button>
-                <button id="btn-relatorios" class="campo-autorizado" style="display: none;">Relatórios</button>
+                <button id="btn-relatorios" style="display: none;">Relatórios</button>
                 <button id="logoffButton">Logoff</button>
             </nav>
         </header>
 
         <main id="content-area">
-            </main>
+            <!-- O conteúdo (bem-vindo, formulário, busca, detalhes) será inserido aqui -->
+        </main>
     </div>
 
+    <!-- ======================= TEMPLATES ======================= -->
+    <!-- (Templates de Cadastro, Detalhes e Relatórios não precisam de alteração) -->
     <template id="form-template">
         <div class="content-container">
             <h2>Cadastro de Novo Contato</h2>
@@ -154,7 +179,6 @@
             <div id="form-feedback"></div>
         </div>
     </template>
-
     <template id="search-template">
         <div class="content-container">
             <h2>Buscar Cadastro</h2>
@@ -167,7 +191,6 @@
             <div id="search-results"><p>Nenhum resultado para exibir. Inicie uma busca acima.</p></div>
         </div>
     </template>
-    
     <template id="details-template">
         <div class="content-container">
             <h2>Detalhes do Cadastro</h2>
@@ -213,7 +236,6 @@
             <div id="form-feedback"></div>
         </div>
     </template>
-
     <template id="reports-template">
         <div class="content-container">
             <h2>Gerador de Relatórios</h2>
@@ -225,7 +247,7 @@
                     <option value="bairro">Bairro</option>
                 </select>
                 <div id="report-value-area" class="input-group">
-                    </div>
+                </div>
                 <button id="generate-report-btn">Gerar</button>
             </div>
             <div id="report-results">
@@ -234,7 +256,7 @@
         </div>
     </template>
 
-
+    <!-- ======================= SCRIPT PRINCIPAL ======================= -->
     <script type="module">
         // Importa as funções necessárias do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
@@ -264,22 +286,29 @@
         ];
         // FIM DA LISTA DE BAIRROS
         
-        // Lista de e-mails autorizados (use letras minúsculas)
         const USUARIOS_AUTORIZADOS = [
             'fabiano@email.com',
-            'adv.flaviomoraes@hotmail.com',
-            'danielbastosneto@gmail.com',
+            'daniel@email.com',
+            'cardim@email.com',
             'bianouba@gmail.com'
         ];
 
-        // Inicializa o Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
         const contentArea = document.getElementById('content-area');
 
-        // Função central para verificar a autorização
+        // NOVO: Função auxiliar para normalizar texto (remover acentos e converter para minúsculas)
+        function normalizeText(text) {
+            if (!text) return '';
+            return text
+                .toString()
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "");
+        }
+
         function isUserAuthorized() {
             const user = auth.currentUser;
             if (!user || !user.email) {
@@ -288,13 +317,11 @@
             return USUARIOS_AUTORIZADOS.includes(user.email.toLowerCase());
         }
 
-        // --- Verificador de Autenticação (Proteção de Página) ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('main-content').style.display = 'flex';
                 
-                // NOVO: Mostra/esconde o botão de Relatórios com base na autorização
                 if (isUserAuthorized()) {
                     document.getElementById('btn-relatorios').style.display = 'block';
                 }
@@ -307,10 +334,9 @@
             }
         });
 
-        // --- Lógica do Menu ---
         document.getElementById('btn-cadastrar').addEventListener('click', () => initRegister());
         document.getElementById('btn-buscar').addEventListener('click', () => initSearch());
-        document.getElementById('btn-relatorios').addEventListener('click', () => initReports()); // NOVO
+        document.getElementById('btn-relatorios').addEventListener('click', () => initReports());
         document.getElementById('logoffButton').addEventListener('click', () => { signOut(auth); });
 
         function showWelcomeMessage() {
@@ -384,9 +410,12 @@
                 const empregoRadio = document.querySelector('input[name="emprego"]:checked');
                 const localEmpregoInput = document.getElementById('local_emprego');
 
+                const nomeValue = document.getElementById('nome').value; // NOVO: Pega o valor do nome
+
                 const membro = {
-                    nome: document.getElementById('nome').value,
-                    // NOVO: Adiciona o campo telefone ao salvar
+                    nome: nomeValue,
+                    // NOVO: Adiciona o campo de busca normalizado ao salvar
+                    nome_normalizado: normalizeText(nomeValue),
                     telefone: document.getElementById('telefone').value,
                     endereco: document.getElementById('endereco').value,
                     bairro: document.getElementById('bairro').value,
@@ -455,21 +484,24 @@
 
         async function handleSearchSubmit(e) {
             e.preventDefault();
-            const searchTerm = document.getElementById('searchInput').value;
+            const searchTermRaw = document.getElementById('searchInput').value;
             const resultsDiv = document.getElementById('search-results');
             
-            if (!searchTerm) {
+            if (!searchTermRaw) {
                 resultsDiv.innerHTML = '<p>Por favor, digite um nome para buscar.</p>';
                 return;
             }
 
+            // NOVO: Normaliza o termo da busca
+            const searchTermNormalized = normalizeText(searchTermRaw);
             resultsDiv.innerHTML = '<p>Buscando...</p>';
 
             try {
+                // NOVO: A busca agora usa o campo 'nome_normalizado'
                 const q = query(collection(db, "cadastros"), 
-                                where("nome", ">=", searchTerm),
-                                where("nome", "<=", searchTerm + '\uf8ff'),
-                                orderBy("nome"));
+                                where("nome_normalizado", ">=", searchTermNormalized),
+                                where("nome_normalizado", "<=", searchTermNormalized + '\uf8ff'),
+                                orderBy("nome_normalizado")); // Ordena pelo campo de busca
                 const querySnapshot = await getDocs(q);
                 
                 if (querySnapshot.empty) {
@@ -492,7 +524,7 @@
                 }
             } catch (error) {
                 console.error("Erro ao buscar dados: ", error);
-                resultsDiv.innerHTML = '<p class="feedback-error">Ocorreu um erro ao realizar a busca.</p>';
+                resultsDiv.innerHTML = '<p class="feedback-error">Ocorreu um erro ao realizar a busca. Verifique se o índice do Firestore foi criado.</p>';
             }
         }
 
@@ -529,7 +561,6 @@
                 document.getElementById('docId').value = docId;
                 document.getElementById('nome').value = data.nome || '';
                 document.getElementById('apelido').value = data.apelido || '';
-                // NOVO: Popula o campo telefone
                 document.getElementById('telefone').value = data.telefone || '';
                 document.getElementById('data_nascimento').value = data.data_nascimento || '';
                 document.getElementById('cpf').value = data.cpf || '';
@@ -592,10 +623,13 @@
                 const empregoRadio = document.querySelector('input[name="emprego"]:checked');
                 const localEmpregoInput = document.getElementById('local_emprego');
 
+                const nomeValue = document.getElementById('nome').value; // NOVO: Pega o valor do nome para normalizar
+
                 const updatedData = {
-                    nome: document.getElementById('nome').value,
+                    nome: nomeValue,
+                    // NOVO: Adiciona o campo de busca normalizado ao atualizar
+                    nome_normalizado: normalizeText(nomeValue),
                     apelido: document.getElementById('apelido').value,
-                    // NOVO: Adiciona o campo telefone ao atualizar
                     telefone: document.getElementById('telefone').value,
                     data_nascimento: document.getElementById('data_nascimento').value,
                     cpf: document.getElementById('cpf').value,
@@ -633,10 +667,9 @@
         }
 
         // ========================================================================
-        //  NOVO: LÓGICA DE RELATÓRIOS
+        //  LÓGICA DE RELATÓRIOS
         // ========================================================================
         function initReports() {
-            // Dupla verificação de segurança
             if (!isUserAuthorized()) {
                 showWelcomeMessage();
                 alert('Você não tem permissão para acessar esta área.');
