@@ -17,18 +17,12 @@
         header {
             background-color: #ffffff; padding: 15px 30px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             display: flex; justify-content: space-between; align-items: center; z-index: 100;
-            /* NOVO: Permite que os itens quebrem a linha em telas pequenas */
-            flex-wrap: wrap;
-            gap: 15px; /* Adiciona um espaço caso quebre a linha */
+            flex-wrap: wrap; gap: 15px;
         }
         header h1 { font-size: 22px; color: #1877f2; }
         
         /* Menu de Navegação */
-        nav { display: flex; gap: 15px; 
-            /* NOVO: Permite que os botões quebrem a linha */
-            flex-wrap: wrap; 
-            justify-content: flex-start; /* Alinha botões à esquerda por padrão */
-        }
+        nav { display: flex; gap: 15px; flex-wrap: wrap; justify-content: flex-start; }
         nav button {
             width: auto; padding: 10px 20px; font-size: 16px; font-weight: 500;
             background-color: #e4e6eb; color: #050505; border: none; border-radius: 8px;
@@ -40,18 +34,10 @@
         #logoffButton { background-color: #fa3e3e; color: white; }
         #logoffButton:hover { background-color: #e33434; }
 
-        /* NOVO: Media Query para telas menores (celulares) */
         @media (max-width: 768px) {
-            header {
-                flex-direction: column; /* Coloca o título em cima e a navegação embaixo */
-                align-items: flex-start; /* Alinha tudo à esquerda */
-            }
-            nav {
-                width: 100%; /* Faz a navegação ocupar a largura toda */
-                justify-content: flex-start; /* Garante que os botões comecem da esquerda */
-            }
+            header { flex-direction: column; align-items: flex-start; }
+            nav { width: 100%; justify-content: flex-start; }
         }
-
 
         /* Área de conteúdo principal */
         main { flex-grow: 1; padding: 30px; overflow-y: auto; }
@@ -109,6 +95,14 @@
         .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         .report-table th, .report-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
         .report-table th { background-color: #f0f2f5; font-weight: 500; }
+
+        /* NOVO: Estilos para impressão */
+        @media print {
+            body * { visibility: hidden; }
+            #report-results, #report-results * { visibility: visible; }
+            #report-results { position: absolute; left: 0; top: 0; width: 100%; }
+            .report-table { font-size: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -136,7 +130,7 @@
     </div>
 
     <!-- ======================= TEMPLATES ======================= -->
-    <!-- (Templates de Cadastro, Detalhes e Relatórios não precisam de alteração) -->
+
     <template id="form-template">
         <div class="content-container">
             <h2>Cadastro de Novo Contato</h2>
@@ -179,6 +173,7 @@
             <div id="form-feedback"></div>
         </div>
     </template>
+
     <template id="search-template">
         <div class="content-container">
             <h2>Buscar Cadastro</h2>
@@ -191,6 +186,7 @@
             <div id="search-results"><p>Nenhum resultado para exibir. Inicie uma busca acima.</p></div>
         </div>
     </template>
+    
     <template id="details-template">
         <div class="content-container">
             <h2>Detalhes do Cadastro</h2>
@@ -227,6 +223,8 @@
                 <div class="form-section">
                     <h3>Dependentes</h3>
                     <div id="dependentes-list"></div>
+                    <!-- NOVO: Botão para adicionar dependentes no modo de edição -->
+                    <button type="button" id="addDependenteEdit" class="button-secondary" style="display: none; margin-top: 15px;">Adicionar Dependente</button>
                 </div>
                 <div class="form-actions">
                     <button type="button" id="editButton" class="button-edit">Editar</button>
@@ -236,6 +234,7 @@
             <div id="form-feedback"></div>
         </div>
     </template>
+
     <template id="reports-template">
         <div class="content-container">
             <h2>Gerador de Relatórios</h2>
@@ -249,6 +248,8 @@
                 <div id="report-value-area" class="input-group">
                 </div>
                 <button id="generate-report-btn">Gerar</button>
+                 <!-- NOVO: Botão para imprimir o relatório -->
+                <button id="print-report-btn" class="button-secondary" style="display: none;">Imprimir</button>
             </div>
             <div id="report-results">
                 <p>Selecione um critério e um valor para gerar um relatório.</p>
@@ -256,12 +257,13 @@
         </div>
     </template>
 
+
     <!-- ======================= SCRIPT PRINCIPAL ======================= -->
     <script type="module">
         // Importa as funções necessárias do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, doc, getDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
         // =================================================================================
         // COLE AQUI AS SUAS CHAVES DE CONFIGURAÇÃO DO FIREBASE
@@ -301,21 +303,27 @@
 
         const contentArea = document.getElementById('content-area');
 
-        // NOVO: Função auxiliar para normalizar texto (remover acentos e converter para minúsculas)
         function normalizeText(text) {
             if (!text) return '';
-            return text
-                .toString()
-                .toLowerCase()
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "");
+            return text.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        }
+
+        // NOVO: Função para calcular idade
+        function calculateAge(birthDateString) {
+            if (!birthDateString) return '';
+            const birthDate = new Date(birthDateString);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            return age >= 0 ? `${age} anos` : '';
         }
 
         function isUserAuthorized() {
             const user = auth.currentUser;
-            if (!user || !user.email) {
-                return false;
-            }
+            if (!user || !user.email) return false;
             return USUARIOS_AUTORIZADOS.includes(user.email.toLowerCase());
         }
 
@@ -323,11 +331,9 @@
             if (user) {
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('main-content').style.display = 'flex';
-                
                 if (isUserAuthorized()) {
                     document.getElementById('btn-relatorios').style.display = 'block';
                 }
-                
                 showWelcomeMessage();
             } else {
                 const currentPath = window.location.pathname;
@@ -411,12 +417,10 @@
             try {
                 const empregoRadio = document.querySelector('input[name="emprego"]:checked');
                 const localEmpregoInput = document.getElementById('local_emprego');
-
-                const nomeValue = document.getElementById('nome').value; // NOVO: Pega o valor do nome
+                const nomeValue = document.getElementById('nome').value;
 
                 const membro = {
                     nome: nomeValue,
-                    // NOVO: Adiciona o campo de busca normalizado ao salvar
                     nome_normalizado: normalizeText(nomeValue),
                     telefone: document.getElementById('telefone').value,
                     endereco: document.getElementById('endereco').value,
@@ -436,8 +440,9 @@
                 
                 const dependentesElements = document.querySelectorAll('.dependente-item');
                 if (dependentesElements.length > 0) {
-                    for (const item of dependentesElements) {
-                        const dependente = {
+                    const batch = writeBatch(db);
+                    dependentesElements.forEach(item => {
+                        const dependenteData = {
                             id_cadastro: docRef.id,
                             nome: item.querySelector('.dependente-nome').value,
                             cpf: item.querySelector('.dependente-cpf').value,
@@ -446,8 +451,10 @@
                             titulo_eleitor: item.querySelector('.dependente-titulo').value,
                             parentesco: item.querySelector('.dependente-parentesco').value,
                         };
-                        await addDoc(collection(db, "dependentes"), dependente);
-                    }
+                        const depDocRef = doc(collection(db, "dependentes"));
+                        batch.set(depDocRef, dependenteData);
+                    });
+                    await batch.commit();
                 }
                 
                 feedbackDiv.textContent = 'Cadastro salvo com sucesso!';
@@ -488,22 +495,18 @@
             e.preventDefault();
             const searchTermRaw = document.getElementById('searchInput').value;
             const resultsDiv = document.getElementById('search-results');
-            
             if (!searchTermRaw) {
                 resultsDiv.innerHTML = '<p>Por favor, digite um nome para buscar.</p>';
                 return;
             }
-
-            // NOVO: Normaliza o termo da busca
             const searchTermNormalized = normalizeText(searchTermRaw);
             resultsDiv.innerHTML = '<p>Buscando...</p>';
 
             try {
-                // NOVO: A busca agora usa o campo 'nome_normalizado'
                 const q = query(collection(db, "cadastros"), 
                                 where("nome_normalizado", ">=", searchTermNormalized),
                                 where("nome_normalizado", "<=", searchTermNormalized + '\uf8ff'),
-                                orderBy("nome_normalizado")); // Ordena pelo campo de busca
+                                orderBy("nome_normalizado"));
                 const querySnapshot = await getDocs(q);
                 
                 if (querySnapshot.empty) {
@@ -530,6 +533,9 @@
             }
         }
 
+        // NOVO: Variável global para guardar os dependentes durante a edição
+        let dependentesParaEdicao = [];
+        
         async function showDetails(docId) {
             contentArea.innerHTML = '<div class="loader-container"><div class="loader"></div><p>Carregando detalhes...</p></div>';
             
@@ -545,8 +551,12 @@
                 const data = docSnap.data();
                 const dependentesQuery = query(collection(db, "dependentes"), where("id_cadastro", "==", docId));
                 const dependentesSnapshot = await getDocs(dependentesQuery);
-                const dependentes = [];
-                dependentesSnapshot.forEach(doc => dependentes.push(doc.data()));
+                
+                // NOVO: Armazena os dependentes com seus IDs
+                dependentesParaEdicao = [];
+                dependentesSnapshot.forEach(doc => {
+                    dependentesParaEdicao.push({ id: doc.id, ...doc.data() });
+                });
 
                 const template = document.getElementById('details-template');
                 const clone = template.content.cloneNode(true);
@@ -570,7 +580,6 @@
                 document.getElementById('titulo_eleitor').value = data.titulo_eleitor || '';
                 document.getElementById('endereco').value = data.endereco || '';
                 document.getElementById('demandas_atendidas').value = data.demandas_atendidas || '';
-                
                 document.querySelector(`input[name="lider"][value="${data.lider || 'Não'}"]`).checked = true;
 
                 if (isUserAuthorized()) {
@@ -580,18 +589,20 @@
                 }
 
                 const dependentesList = document.getElementById('dependentes-list');
-                if (dependentes.length > 0) {
-                    dependentes.forEach(dep => {
+                if (dependentesParaEdicao.length > 0) {
+                    dependentesParaEdicao.forEach(dep => {
                         const item = document.createElement('div');
                         item.className = 'result-item';
-                        item.innerHTML = `<div><div class="result-item-name">${dep.nome}</div><div class="result-item-cpf">Parentesco: ${dep.parentesco || 'Não informado'}</div></div>`;
+                        // NOVO: Exibe a idade do dependente
+                        const idade = calculateAge(dep.data_nascimento);
+                        item.innerHTML = `<div><div class="result-item-name">${dep.nome} (${idade})</div><div class="result-item-cpf">Parentesco: ${dep.parentesco || 'Não informado'}</div></div>`;
                         dependentesList.appendChild(item);
                     });
                 } else {
                     dependentesList.innerHTML = '<p>Nenhum dependente cadastrado.</p>';
                 }
 
-                document.getElementById('editButton').addEventListener('click', () => enableEditing());
+                document.getElementById('editButton').addEventListener('click', () => enableEditing(docId));
                 document.getElementById('detailsForm').addEventListener('submit', handleUpdateSubmit);
 
             } catch (error) {
@@ -600,17 +611,58 @@
             }
         }
 
-        function enableEditing() {
+        // NOVO: Função de edição de dependentes totalmente refeita
+        function enableEditing(docId) {
             const form = document.getElementById('detailsForm');
-            const inputs = form.querySelectorAll('input, textarea, select');
-            inputs.forEach(input => {
+            form.querySelectorAll('input, textarea, select').forEach(input => {
                 if(input.type !== 'hidden') input.disabled = false;
             });
 
             document.getElementById('editButton').style.display = 'none';
             document.getElementById('saveChangesButton').style.display = 'block';
+            document.getElementById('addDependenteEdit').style.display = 'block';
+
+            const dependentesList = document.getElementById('dependentes-list');
+            dependentesList.innerHTML = ''; // Limpa a lista estática
+
+            // Renderiza os dependentes como formulários editáveis
+            dependentesParaEdicao.forEach(dep => {
+                const item = createDependenteFormItem(dep);
+                dependentesList.appendChild(item);
+            });
+            
+            document.getElementById('addDependenteEdit').addEventListener('click', () => {
+                const item = createDependenteFormItem(); // Cria um item em branco
+                dependentesList.appendChild(item);
+            });
+        }
+        
+        // NOVO: Função auxiliar para criar o HTML de um dependente (seja novo ou existente)
+        function createDependenteFormItem(dependente = {}) {
+            const docId = dependente.id || '';
+            const data = dependente;
+            
+            const item = document.createElement('div');
+            item.className = 'dependente-item';
+            // O data-doc-id é crucial para sabermos se é um dependente novo ou existente
+            item.innerHTML = `
+                <input type="hidden" class="dependente-id" value="${docId}">
+                <h4>${docId ? 'Editando Dependente' : 'Novo Dependente'}</h4>
+                <div class="form-grid">
+                    <div class="input-group"><label>Nome</label><input type="text" class="dependente-nome" value="${data.nome || ''}" required></div>
+                    <div class="input-group"><label>Parentesco</label><input type="text" class="dependente-parentesco" value="${data.parentesco || ''}"></div>
+                    <div class="input-group"><label>Data de Nascimento</label><input type="date" class="dependente-nascimento" value="${data.data_nascimento || ''}"></div>
+                    <div class="input-group"><label>CPF</label><input type="text" class="dependente-cpf" value="${data.cpf || ''}"></div>
+                    <div class="input-group"><label>RG</label><input type="text" class="dependente-rg" value="${data.rg || ''}"></div>
+                    <div class="input-group"><label>Título de Eleitor</label><input type="text" class="dependente-titulo" value="${data.titulo_eleitor || ''}"></div>
+                </div>
+                <button type="button" class="remove-dependente">Remover</button>`;
+            
+            item.querySelector('.remove-dependente').addEventListener('click', () => item.remove());
+            return item;
         }
 
+        // NOVO: Função de salvar totalmente refeita para lidar com dependentes
         async function handleUpdateSubmit(e) {
             e.preventDefault();
             const saveButton = document.getElementById('saveChangesButton');
@@ -622,14 +674,15 @@
             feedbackDiv.style.display = 'none';
 
             try {
+                const batch = writeBatch(db);
+
+                // 1. Atualiza o cadastro principal
                 const empregoRadio = document.querySelector('input[name="emprego"]:checked');
                 const localEmpregoInput = document.getElementById('local_emprego');
-
-                const nomeValue = document.getElementById('nome').value; // NOVO: Pega o valor do nome para normalizar
+                const nomeValue = document.getElementById('nome').value;
 
                 const updatedData = {
                     nome: nomeValue,
-                    // NOVO: Adiciona o campo de busca normalizado ao atualizar
                     nome_normalizado: normalizeText(nomeValue),
                     apelido: document.getElementById('apelido').value,
                     telefone: document.getElementById('telefone').value,
@@ -644,18 +697,47 @@
                     local_emprego: localEmpregoInput ? localEmpregoInput.value : '',
                     demandas_atendidas: document.getElementById('demandas_atendidas').value,
                 };
-
                 const docRef = doc(db, "cadastros", docId);
-                await updateDoc(docRef, updatedData);
+                batch.update(docRef, updatedData);
+
+                // 2. Processa os dependentes
+                const dependentesFormItems = document.querySelectorAll('#dependentes-list .dependente-item');
+                const dependentesIdsNaTela = new Set();
+
+                dependentesFormItems.forEach(item => {
+                    const depId = item.querySelector('.dependente-id').value;
+                    const depData = {
+                        id_cadastro: docId,
+                        nome: item.querySelector('.dependente-nome').value,
+                        cpf: item.querySelector('.dependente-cpf').value,
+                        rg: item.querySelector('.dependente-rg').value,
+                        data_nascimento: item.querySelector('.dependente-nascimento').value,
+                        titulo_eleitor: item.querySelector('.dependente-titulo').value,
+                        parentesco: item.querySelector('.dependente-parentesco').value,
+                    };
+
+                    if (depId) { // Se tem ID, é um dependente existente -> Atualiza
+                        batch.update(doc(db, "dependentes", depId), depData);
+                        dependentesIdsNaTela.add(depId);
+                    } else { // Se não tem ID, é um novo dependente -> Adiciona
+                        batch.set(doc(collection(db, "dependentes")), depData);
+                    }
+                });
+                
+                // 3. Deleta os dependentes que foram removidos
+                dependentesParaEdicao.forEach(depOriginal => {
+                    if (!dependentesIdsNaTela.has(depOriginal.id)) {
+                        batch.delete(doc(db, "dependentes", depOriginal.id));
+                    }
+                });
+
+                await batch.commit(); // Executa todas as operações de uma vez
 
                 feedbackDiv.textContent = 'Alterações salvas com sucesso!';
                 feedbackDiv.className = 'feedback-success';
                 
-                const form = document.getElementById('detailsForm');
-                const inputs = form.querySelectorAll('input, textarea, select');
-                inputs.forEach(input => input.disabled = true);
-                document.getElementById('editButton').style.display = 'block';
-                document.getElementById('saveChangesButton').style.display = 'none';
+                // Recarrega a tela de detalhes para mostrar os dados atualizados
+                showDetails(docId);
 
             } catch (error) {
                 console.error("Erro ao atualizar documento: ", error);
@@ -686,6 +768,8 @@
             criterionSelect.addEventListener('change', updateReportValueControl);
             
             document.getElementById('generate-report-btn').addEventListener('click', handleReportGeneration);
+            // NOVO: Listener para o botão de impressão
+            document.getElementById('print-report-btn').addEventListener('click', () => window.print());
         }
         
         function updateReportValueControl() {
@@ -693,12 +777,7 @@
             const valueArea = document.getElementById('report-value-area');
             
             if (criterion === 'lider' || criterion === 'emprego') {
-                valueArea.innerHTML = `
-                    <select id="report-value" class="input-group">
-                        <option value="Sim">Sim</option>
-                        <option value="Não">Não</option>
-                    </select>
-                `;
+                valueArea.innerHTML = `<select id="report-value" class="input-group"><option value="Sim">Sim</option><option value="Não">Não</option></select>`;
             } else if (criterion === 'bairro') {
                 valueArea.innerHTML = `<select id="report-value" class="input-group"></select>`;
                 populateBairrosDropdown('report-value');
@@ -711,7 +790,10 @@
             const criterion = document.getElementById('report-criterion').value;
             const valueSelect = document.getElementById('report-value');
             const resultsDiv = document.getElementById('report-results');
+            const printBtn = document.getElementById('print-report-btn');
             
+            printBtn.style.display = 'none'; // Esconde o botão até ter um resultado
+
             if (!criterion || !valueSelect) {
                 resultsDiv.innerHTML = '<p>Por favor, selecione um critério e um valor.</p>';
                 return;
@@ -728,13 +810,7 @@
                     resultsDiv.innerHTML = '<p>Nenhum resultado encontrado para este critério.</p>';
                 } else {
                     let tableHTML = `<table class="report-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Nome</th>
-                                                <th>Apelido</th>
-                                                <th>Telefone</th>
-                                            </tr>
-                                        </thead>
+                                        <thead><tr><th>Nome</th><th>Apelido</th><th>Telefone</th></tr></thead>
                                         <tbody>`;
                     
                     querySnapshot.forEach(doc => {
@@ -748,15 +824,13 @@
                     
                     tableHTML += `</tbody></table>`;
                     resultsDiv.innerHTML = tableHTML;
+                    printBtn.style.display = 'inline-block'; // Mostra o botão de imprimir
                 }
             } catch (error) {
                 console.error("Erro ao gerar relatório: ", error);
                 resultsDiv.innerHTML = '<p class="feedback-error">Ocorreu um erro ao gerar o relatório.</p>';
             }
         }
-
     </script>
 </body>
 </html>
-
-
