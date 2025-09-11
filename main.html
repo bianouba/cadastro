@@ -95,6 +95,8 @@
         .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         .report-table th, .report-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
         .report-table th { background-color: #f0f2f5; font-weight: 500; }
+        /* NOVO: Estilo para o cabeçalho de grupo no relatório geral */
+        .bairro-header td { background-color: #e9ecef; font-weight: bold; }
 
         /* NOVO: Estilos para impressão */
         @media print {
@@ -179,7 +181,7 @@
             <h2>Buscar Cadastro</h2>
             <form id="searchForm">
                 <div class="search-bar">
-                    <input type="text" id="searchInput" placeholder="Digite o nome para buscar..." class="input-group">
+                    <input type="text" id="searchInput" placeholder="Digite o nome ou apelido para buscar..." class="input-group">
                     <button type="submit">Buscar</button>
                 </div>
             </form>
@@ -223,7 +225,6 @@
                 <div class="form-section">
                     <h3>Dependentes</h3>
                     <div id="dependentes-list"></div>
-                    <!-- NOVO: Botão para adicionar dependentes no modo de edição -->
                     <button type="button" id="addDependenteEdit" class="button-secondary" style="display: none; margin-top: 15px;">Adicionar Dependente</button>
                 </div>
                 <div class="form-actions">
@@ -244,11 +245,12 @@
                     <option value="lider">Status de Liderança</option>
                     <option value="emprego">Status de Emprego</option>
                     <option value="bairro">Bairro</option>
+                    <!-- NOVO: Opção de relatório geral -->
+                    <option value="geral_bairro">Geral por Bairro</option>
                 </select>
                 <div id="report-value-area" class="input-group">
                 </div>
                 <button id="generate-report-btn">Gerar</button>
-                 <!-- NOVO: Botão para imprimir o relatório -->
                 <button id="print-report-btn" class="button-secondary" style="display: none;">Imprimir</button>
             </div>
             <div id="report-results">
@@ -308,7 +310,6 @@
             return text.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         }
 
-        // NOVO: Função para calcular idade
         function calculateAge(birthDateString) {
             if (!birthDateString) return '';
             const birthDate = new Date(birthDateString);
@@ -410,6 +411,20 @@
             e.preventDefault();
             const saveButton = e.target.querySelector('button[type="submit"]');
             const feedbackDiv = document.getElementById('form-feedback');
+            const nomeValue = document.getElementById('nome').value;
+
+            // NOVO: Verificação de nome duplicado
+            const nomeNormalizado = normalizeText(nomeValue);
+            const q = query(collection(db, "cadastros"), where("nome_normalizado", "==", nomeNormalizado));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                feedbackDiv.textContent = 'Erro: Já existe um cadastro com este nome.';
+                feedbackDiv.className = 'feedback-error';
+                feedbackDiv.style.display = 'block';
+                return; // Interrompe o salvamento
+            }
+
             saveButton.disabled = true;
             saveButton.textContent = 'Salvando...';
             feedbackDiv.style.display = 'none';
@@ -417,11 +432,13 @@
             try {
                 const empregoRadio = document.querySelector('input[name="emprego"]:checked');
                 const localEmpregoInput = document.getElementById('local_emprego');
-                const nomeValue = document.getElementById('nome').value;
+                const apelidoValue = document.getElementById('apelido').value; // Pega o apelido
 
                 const membro = {
                     nome: nomeValue,
-                    nome_normalizado: normalizeText(nomeValue),
+                    nome_normalizado: nomeNormalizado,
+                    apelido: apelidoValue,
+                    apelido_normalizado: normalizeText(apelidoValue), // Salva apelido normalizado
                     telefone: document.getElementById('telefone').value,
                     endereco: document.getElementById('endereco').value,
                     bairro: document.getElementById('bairro').value,
@@ -433,7 +450,6 @@
                     demandas_atendidas: document.getElementById('demandas_atendidas').value,
                     emprego: empregoRadio ? empregoRadio.value : 'Não',
                     local_emprego: localEmpregoInput ? localEmpregoInput.value : '',
-                    apelido: document.getElementById('apelido').value,
                     data_hora_cadastro: serverTimestamp()
                 };
                 const docRef = await addDoc(collection(db, "cadastros"), membro);
@@ -496,25 +512,39 @@
             const searchTermRaw = document.getElementById('searchInput').value;
             const resultsDiv = document.getElementById('search-results');
             if (!searchTermRaw) {
-                resultsDiv.innerHTML = '<p>Por favor, digite um nome para buscar.</p>';
+                resultsDiv.innerHTML = '<p>Por favor, digite um nome ou apelido para buscar.</p>';
                 return;
             }
             const searchTermNormalized = normalizeText(searchTermRaw);
             resultsDiv.innerHTML = '<p>Buscando...</p>';
 
             try {
-                const q = query(collection(db, "cadastros"), 
+                // NOVO: Duas buscas em paralelo, uma para nome e outra para apelido
+                const nomeQuery = query(collection(db, "cadastros"), 
                                 where("nome_normalizado", ">=", searchTermNormalized),
-                                where("nome_normalizado", "<=", searchTermNormalized + '\uf8ff'),
-                                orderBy("nome_normalizado"));
-                const querySnapshot = await getDocs(q);
+                                where("nome_normalizado", "<=", searchTermNormalized + '\uf8ff'));
                 
-                if (querySnapshot.empty) {
+                const apelidoQuery = query(collection(db, "cadastros"), 
+                                where("apelido_normalizado", ">=", searchTermNormalized),
+                                where("apelido_normalizado", "<=", searchTermNormalized + '\uf8ff'));
+
+                const [nomeSnapshot, apelidoSnapshot] = await Promise.all([
+                    getDocs(nomeQuery),
+                    getDocs(apelidoQuery)
+                ]);
+
+                // NOVO: Junta os resultados e remove duplicados
+                const resultsMap = new Map();
+                nomeSnapshot.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+                apelidoSnapshot.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+
+                const finalResults = Array.from(resultsMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+                
+                if (finalResults.length === 0) {
                     resultsDiv.innerHTML = '<p>Nenhum resultado encontrado.</p>';
                 } else {
                     resultsDiv.innerHTML = '';
-                    querySnapshot.forEach((doc) => {
-                        const data = doc.data();
+                    finalResults.forEach((data) => {
                         const resultItem = document.createElement('div');
                         resultItem.className = 'result-item';
                         resultItem.innerHTML = `
@@ -522,18 +552,17 @@
                                 <div class="result-item-name">${data.nome}</div>
                                 <div class="result-item-cpf">CPF: ${data.cpf || 'Não informado'}</div>
                             </div>
-                            <button data-id="${doc.id}">Ver Detalhes</button>
+                            <button data-id="${data.id}">Ver Detalhes</button>
                         `;
                         resultsDiv.appendChild(resultItem);
                     });
                 }
             } catch (error) {
                 console.error("Erro ao buscar dados: ", error);
-                resultsDiv.innerHTML = '<p class="feedback-error">Ocorreu um erro ao realizar a busca. Verifique se o índice do Firestore foi criado.</p>';
+                resultsDiv.innerHTML = '<p class="feedback-error">Ocorreu um erro ao realizar a busca.</p>';
             }
         }
 
-        // NOVO: Variável global para guardar os dependentes durante a edição
         let dependentesParaEdicao = [];
         
         async function showDetails(docId) {
@@ -552,7 +581,6 @@
                 const dependentesQuery = query(collection(db, "dependentes"), where("id_cadastro", "==", docId));
                 const dependentesSnapshot = await getDocs(dependentesQuery);
                 
-                // NOVO: Armazena os dependentes com seus IDs
                 dependentesParaEdicao = [];
                 dependentesSnapshot.forEach(doc => {
                     dependentesParaEdicao.push({ id: doc.id, ...doc.data() });
@@ -593,7 +621,6 @@
                     dependentesParaEdicao.forEach(dep => {
                         const item = document.createElement('div');
                         item.className = 'result-item';
-                        // NOVO: Exibe a idade do dependente
                         const idade = calculateAge(dep.data_nascimento);
                         item.innerHTML = `<div><div class="result-item-name">${dep.nome} (${idade})</div><div class="result-item-cpf">Parentesco: ${dep.parentesco || 'Não informado'}</div></div>`;
                         dependentesList.appendChild(item);
@@ -611,7 +638,6 @@
             }
         }
 
-        // NOVO: Função de edição de dependentes totalmente refeita
         function enableEditing(docId) {
             const form = document.getElementById('detailsForm');
             form.querySelectorAll('input, textarea, select').forEach(input => {
@@ -623,28 +649,25 @@
             document.getElementById('addDependenteEdit').style.display = 'block';
 
             const dependentesList = document.getElementById('dependentes-list');
-            dependentesList.innerHTML = ''; // Limpa a lista estática
+            dependentesList.innerHTML = ''; 
 
-            // Renderiza os dependentes como formulários editáveis
             dependentesParaEdicao.forEach(dep => {
                 const item = createDependenteFormItem(dep);
                 dependentesList.appendChild(item);
             });
             
             document.getElementById('addDependenteEdit').addEventListener('click', () => {
-                const item = createDependenteFormItem(); // Cria um item em branco
+                const item = createDependenteFormItem(); 
                 dependentesList.appendChild(item);
             });
         }
         
-        // NOVO: Função auxiliar para criar o HTML de um dependente (seja novo ou existente)
         function createDependenteFormItem(dependente = {}) {
             const docId = dependente.id || '';
             const data = dependente;
             
             const item = document.createElement('div');
             item.className = 'dependente-item';
-            // O data-doc-id é crucial para sabermos se é um dependente novo ou existente
             item.innerHTML = `
                 <input type="hidden" class="dependente-id" value="${docId}">
                 <h4>${docId ? 'Editando Dependente' : 'Novo Dependente'}</h4>
@@ -662,7 +685,6 @@
             return item;
         }
 
-        // NOVO: Função de salvar totalmente refeita para lidar com dependentes
         async function handleUpdateSubmit(e) {
             e.preventDefault();
             const saveButton = document.getElementById('saveChangesButton');
@@ -676,15 +698,16 @@
             try {
                 const batch = writeBatch(db);
 
-                // 1. Atualiza o cadastro principal
                 const empregoRadio = document.querySelector('input[name="emprego"]:checked');
                 const localEmpregoInput = document.getElementById('local_emprego');
                 const nomeValue = document.getElementById('nome').value;
+                const apelidoValue = document.getElementById('apelido').value;
 
                 const updatedData = {
                     nome: nomeValue,
                     nome_normalizado: normalizeText(nomeValue),
-                    apelido: document.getElementById('apelido').value,
+                    apelido: apelidoValue,
+                    apelido_normalizado: normalizeText(apelidoValue),
                     telefone: document.getElementById('telefone').value,
                     data_nascimento: document.getElementById('data_nascimento').value,
                     cpf: document.getElementById('cpf').value,
@@ -700,7 +723,6 @@
                 const docRef = doc(db, "cadastros", docId);
                 batch.update(docRef, updatedData);
 
-                // 2. Processa os dependentes
                 const dependentesFormItems = document.querySelectorAll('#dependentes-list .dependente-item');
                 const dependentesIdsNaTela = new Set();
 
@@ -716,27 +738,25 @@
                         parentesco: item.querySelector('.dependente-parentesco').value,
                     };
 
-                    if (depId) { // Se tem ID, é um dependente existente -> Atualiza
+                    if (depId) {
                         batch.update(doc(db, "dependentes", depId), depData);
                         dependentesIdsNaTela.add(depId);
-                    } else { // Se não tem ID, é um novo dependente -> Adiciona
+                    } else {
                         batch.set(doc(collection(db, "dependentes")), depData);
                     }
                 });
                 
-                // 3. Deleta os dependentes que foram removidos
                 dependentesParaEdicao.forEach(depOriginal => {
                     if (!dependentesIdsNaTela.has(depOriginal.id)) {
                         batch.delete(doc(db, "dependentes", depOriginal.id));
                     }
                 });
 
-                await batch.commit(); // Executa todas as operações de uma vez
+                await batch.commit();
 
                 feedbackDiv.textContent = 'Alterações salvas com sucesso!';
                 feedbackDiv.className = 'feedback-success';
                 
-                // Recarrega a tela de detalhes para mostrar os dados atualizados
                 showDetails(docId);
 
             } catch (error) {
@@ -768,7 +788,6 @@
             criterionSelect.addEventListener('change', updateReportValueControl);
             
             document.getElementById('generate-report-btn').addEventListener('click', handleReportGeneration);
-            // NOVO: Listener para o botão de impressão
             document.getElementById('print-report-btn').addEventListener('click', () => window.print());
         }
         
@@ -792,39 +811,77 @@
             const resultsDiv = document.getElementById('report-results');
             const printBtn = document.getElementById('print-report-btn');
             
-            printBtn.style.display = 'none'; // Esconde o botão até ter um resultado
+            printBtn.style.display = 'none';
 
-            if (!criterion || !valueSelect) {
-                resultsDiv.innerHTML = '<p>Por favor, selecione um critério e um valor.</p>';
+            if (!criterion) { // NOVO: Tratamento para o relatório geral
+                resultsDiv.innerHTML = '<p>Selecione um critério.</p>';
                 return;
             }
-            
-            const value = valueSelect.value;
+
             resultsDiv.innerHTML = '<p>Gerando relatório...</p>';
 
             try {
-                const q = query(collection(db, "cadastros"), where(criterion, "==", value), orderBy("nome"));
+                let q;
+                if (criterion === 'geral_bairro') {
+                    q = query(collection(db, "cadastros"), orderBy("bairro"), orderBy("nome"));
+                } else {
+                    if (!valueSelect) {
+                        resultsDiv.innerHTML = '<p>Por favor, selecione um valor.</p>';
+                        return;
+                    }
+                    const value = valueSelect.value;
+                    q = query(collection(db, "cadastros"), where(criterion, "==", value), orderBy("nome"));
+                }
+
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
                     resultsDiv.innerHTML = '<p>Nenhum resultado encontrado para este critério.</p>';
                 } else {
-                    let tableHTML = `<table class="report-table">
-                                        <thead><tr><th>Nome</th><th>Apelido</th><th>Telefone</th></tr></thead>
-                                        <tbody>`;
+                    let headers = '';
+                    let rows = '';
+                    let currentBairro = null;
+
+                    switch(criterion) {
+                        case 'lider':
+                            headers = '<th>Nome</th><th>Apelido</th><th>Telefone</th><th>Bairro</th>';
+                            break;
+                        case 'emprego':
+                            headers = '<th>Nome</th><th>Apelido</th><th>Telefone</th><th>Local do Emprego</th>';
+                            break;
+                        case 'bairro':
+                        case 'geral_bairro':
+                            headers = '<th>Nome</th><th>Apelido</th><th>Telefone</th><th>É Líder?</th>';
+                            break;
+                    }
                     
                     querySnapshot.forEach(doc => {
                         const data = doc.data();
-                        tableHTML += `<tr>
-                                        <td>${data.nome || ''}</td>
-                                        <td>${data.apelido || ''}</td>
-                                        <td>${data.telefone || ''}</td>
-                                      </tr>`;
+
+                        if (criterion === 'geral_bairro' && data.bairro !== currentBairro) {
+                            currentBairro = data.bairro;
+                            rows += `<tr class="bairro-header"><td colspan="4">${currentBairro || 'Sem Bairro'}</td></tr>`;
+                        }
+
+                        rows += `<tr>`;
+                        switch(criterion) {
+                            case 'lider':
+                                rows += `<td>${data.nome || ''}</td><td>${data.apelido || ''}</td><td>${data.telefone || ''}</td><td>${data.bairro || ''}</td>`;
+                                break;
+                            case 'emprego':
+                                rows += `<td>${data.nome || ''}</td><td>${data.apelido || ''}</td><td>${data.telefone || ''}</td><td>${data.local_emprego || ''}</td>`;
+                                break;
+                            case 'bairro':
+                            case 'geral_bairro':
+                                rows += `<td>${data.nome || ''}</td><td>${data.apelido || ''}</td><td>${data.telefone || ''}</td><td>${data.lider || ''}</td>`;
+                                break;
+                        }
+                        rows += `</tr>`;
                     });
                     
-                    tableHTML += `</tbody></table>`;
+                    const tableHTML = `<table class="report-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
                     resultsDiv.innerHTML = tableHTML;
-                    printBtn.style.display = 'inline-block'; // Mostra o botão de imprimir
+                    printBtn.style.display = 'inline-block';
                 }
             } catch (error) {
                 console.error("Erro ao gerar relatório: ", error);
@@ -834,4 +891,3 @@
     </script>
 </body>
 </html>
-
